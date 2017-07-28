@@ -1,0 +1,263 @@
+<html>
+    <head>
+        <title>PinPong</title>
+        <meta charset="utf-8"/>
+        <meta author="Orlando Almario">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    	<link rel="stylesheet" href="normalize.css">
+        <link rel="stylesheet" href="skeleton.css">
+        <style>
+            body{
+                margin:0px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                text-align: center;
+            }
+            .playLabel{
+                    float: left;
+                    margin-left: 30px;
+                    font-size: 1.3em;
+                    margin-bottom: 0.3em;
+            }
+            .points{
+                    font-weight: bold;
+                    font-size: 3em;
+                    
+            }
+            #p1{
+                float: left;
+                margin-left: 50px;
+            }
+            #p2{
+                float: right;
+                margin-right: 50px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h3>Ping Pong</h3>
+            <span id="playLabel" class="playLabel"></span>
+            <div id="sketch" class="sketch">
+
+            </div>
+            <span id="p1" class="points">0</span>
+            <span id="p2" class="points">0</span>
+        </div>
+        <script
+  src="http://code.jquery.com/jquery-3.2.1.min.js"
+  integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+  crossorigin="anonymous"></script>
+        <script type="text/javascript" src="socket.io.js"></script>
+        <script type="text/javascript" src="p5.min.js"></script>
+        <script>
+            // todas las variables 
+            var socket = io();
+
+            var sketch = document.getElementById('sketch');
+            var youAreLabel = document.getElementById('playLabel');
+            var p1Label = document.getElementById('p1');
+            var p2Label = document.getElementById('p2');
+
+            var margin = 5; 
+            var paletaJ1; 
+            var paletaJ2; 
+            var pelota; 
+
+            var puntosJ1 = 0;
+            var puntosJ2 = 0;
+
+            var inputsP1 = new Inputs(); 
+            var inputsP2 = new Inputs();
+
+            var isPlayer = "none";
+
+            /// codigo para sockets 
+            $(function(){
+            
+            socket.on("play", function(msg){
+                if(msg.player==1) {youAreLabel.innerHTML = "Juegas con la izquierda"; isPlayer="one"}
+                if(msg.player==2) {youAreLabel.innerHTML = "Juegas con la Derecha"; isPlayer="two"}
+                if(msg.player==0) {youAreLabel.innerHTML = "solo puedes ver";}
+            });
+
+            // enviar inputs 
+            setInterval(function(){
+                socket.emit('input',{up: keyIsDown(UP_ARROW), down:keyIsDown(DOWN_ARROW)}); 
+            }, 20)
+
+            //recibir inputs 
+            socket.on('inputs', function(inputs){
+                inputsP1.up = inputs.p1up;
+                inputsP1.down = inputs.p1down;
+                inputsP2.up = inputs.p2up;
+                inputsP2.down = inputs.p2down;
+                console.log("p2 inputs are: "+ inputs.p2up + "  " + inputs.p2down);
+                //console.log("p1 inputs are: "+ inputsP1.up + "  " + inputsP1.down);
+            });
+
+            socket.on('start', function(msg){
+                pelota.enable();
+            });
+
+            socket.on('stop', function(msg){
+                pelota.enable();
+            });
+            
+            });
+
+            // codigo p5
+            function setup(){
+                var canvas = createCanvas(620,470);
+                canvas.parent(sketch);
+                paletaJ1 =  new Paleta(margin,margin);
+                paletaJ2 =  new Paleta(width-margin-paletaJ1.witdh,margin);
+                pelota = new Bola(width/2, height/2, 8,8);
+            }
+
+            function draw(){
+                background(0);
+                //jugador 1
+                paletaJ1.move(inputsP1.up,inputsP1.down,margin);
+                paletaJ1.display();
+                
+                //jugador 2
+                paletaJ2.move(inputsP2.up,inputsP2.down,margin);
+                paletaJ2.display();
+
+                // pelota 
+                pelota.move();
+                pelota.constraintV();
+                pelota.constraintH(paletaJ1, true);
+                pelota.constraintH(paletaJ2, false);
+                pelota.display();
+
+                // check for points 
+                //si pasa por la izquierda punto para el jugador dos.
+                if(pelota.x<0){
+                    puntosJ2++;
+                    pelota.reset();
+                    setPoints();
+                }
+
+                if(pelota.x>width){
+                    puntosJ1++;
+                    pelota.reset();
+                    setPoints();                    
+                }
+
+            }
+
+            function setPoints(){
+                p1Label.innerHTML = puntosJ1;
+                p2Label.innerHTML = puntosJ2;
+            }
+
+            function Inputs(){
+                this.up = false; 
+                this.down = false; 
+            }
+
+            // clase para la paleta 
+            function Paleta(initX, initY){
+                this.x = initX; 
+                this.y = initY; 
+                this.speed = 8;
+                this.height = 120; 
+                this.witdh = 30;
+                this.local = true;
+
+                this.display = function(){
+                    noStroke();
+                    rect(this.x,this.y, this.witdh, this.height);
+                }
+
+                this.move = function(up,down,margin_){
+                    // move is buttons are pressed
+                    if(up){
+                        this.y -= this.speed;
+                    }
+                    if(down){
+                        this.y += this.speed;
+                    }
+                    // check margin boundaries
+                    if(this.y<margin_) {this.y = margin_;}
+                    if(this.y>height-margin_-this.height) {this.y = height-margin_-this.height;}
+                }
+            }
+
+            function Bola(initX, initY, dX, dY){
+                this.x = initX; 
+                this.y = initY; 
+                this.dX = dX; 
+                this.dY = dY;
+                this.diameter = 30;
+                this.speed = 10;
+                this.canMove = false;
+
+                this.display = function(){
+                    noStroke();
+                    ellipse(this.x, this.y, this.diameter, this.diameter);
+                }
+
+                this.move = function(){
+                    if(this.canMove){
+                        this.x += this.dX; 
+                        this.y += this.dY; 
+                        console.log("bola position is "+this.x+" , "+this.y);
+                    }
+                }
+
+                this.constraintV = function(){
+                    if(this.y>height-this.diameter/2) {
+                        this.y = height-this.diameter/2;
+                        this.dY = this.dY*-1;
+                    }
+                    if(this.y<this.diameter/2) {
+                        this.y = this.diameter/2;
+                        this.dY = this.dY*-1;
+                    }
+                }
+
+                this.constraintH = function(pal, isLeft){
+                    if(isLeft){
+                        var leftLimit = pal.x + pal.witdh + this.diameter/2;
+                        var topLimit = pal.y;
+                        var botLimit = pal.y+pal.height;
+                        if(this.x < leftLimit && this.y-this.diameter/2 > topLimit && this.y+this.diameter/2 < botLimit){
+                            this.dX = this.dX*-1;
+                        }
+                    }
+                    else{
+                        var rightLimit = pal.x-this.diameter/2;
+                        var topLimit = pal.y;
+                        var botLimit = pal.y+pal.height;
+                        if(this.x>rightLimit && this.y-this.diameter/2 > topLimit && this.y+this.diameter/2 < botLimit){
+                            this.dX = this.dX*-1;
+                        }
+                    }
+                }
+
+                this.end = function(){
+                    this.x = width/2; 
+                    this.y = height/2; 
+                    this.canMove = false;
+                }
+
+                this.reset = function(){
+                    this.x = width/2; 
+                    this.y = height/2; 
+                    this.canMove = false;
+                    setTimeout(this.enable.bind(this), 2000);
+                }
+
+                this.enable = function(){
+                    this.canMove = true;
+                }
+            }
+
+            
+        </script>
+    </body>
+</html>
